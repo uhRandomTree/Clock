@@ -20,7 +20,9 @@ var (
 	DigitColour string
 	BackgroundColour string
 	DigitRGB = [3]uint8{255, 255, 255}
-	BackgroundRGB [3]uint8
+	BackgroundRGB = [3]uint8{0, 0, 0}
+	TwelveHour bool
+	Mini bool
 	ShowHexError error
 )
 
@@ -133,10 +135,47 @@ func CombineDrawTables(DrawTable ...[9][5]bool) (DrawBoard [9][]bool) {
 //0,0         0,1        0,2.          1,0          1,1          1,2
 //0:2,0:4   0:2,4:8   0:2,8:12   2:4,0:4    2:4,4:8     2:4,8:12
 
-// func BrailleRender (DrawBoard [9][]bool) {
-// 	var BrailleTable [3][24]rune
-	
-// }
+func BrailleRender (DrawBoard [9][]bool) {
+	var BrailleTable [3][24]rune
+	const BrailleHeader = 0x28 << 8
+
+	for Row := range 2 {
+		OriginY := Row * 4
+		for Column := range 24 {
+			OriginX := Column * 2
+			BrailleTable[Row][Column] = BrailleHeader
+			
+			//Gotta make the below better, will fix.
+		
+			var Scaler = [8][2]uint8{
+				{0, 0},
+				{1, 0},
+				{2, 0},
+				{0, 1},
+				{1, 1},
+				{2, 1},
+				{3, 0},
+				{3, 1}}
+			for ToShift, Scale := range Scaler {
+			if DrawBoard[OriginY + int(Scale[0])][OriginX + int(Scale[1])] { BrailleTable[Row][Column] += 0b0000_0001 << ToShift }
+			}
+		}
+	}
+
+	for Column := range 24 {
+		OriginX := Column * 2
+		BrailleTable[2][Column] = BrailleHeader
+		if DrawBoard[8][OriginX] { BrailleTable[2][Column] += 0b0000_0001 }
+		if DrawBoard[8][OriginX+1] { BrailleTable[2][Column] += 0b0000_1000 }
+	}
+
+	for _, Row := range  BrailleTable{
+		for _, Column := range Row {
+			fmt.Print(string(Column))
+		}
+		fmt.Println()
+	}
+}
 
 func DigitMatrixMini(DigitWanted uint8) (DrawTable [9][5]bool) {
 	var RequestedDigitData=[10]uint8{252,96,218,242,102,182,Six,224,254,Nine}[DigitWanted];for BitCounter:=uint8(0);BitCounter<8;BitCounter++{if RequestedDigitData&128==128{var(CurrentSegment=[7]uint8{32,131,139,48,11,3,40}[BitCounter];X=(CurrentSegment&224)>>5;Y=(CurrentSegment&30)>>1;Direction bool=CurrentSegment&1==1);if Direction{DrawTable[Y][X],DrawTable[Y+1][X],DrawTable[Y+2][X]=true,true,true}else{DrawTable[Y][X],DrawTable[Y][X+1],DrawTable[Y][X+2]=true,true,true}};RequestedDigitData<<=1};return}
@@ -182,6 +221,8 @@ func main() {
 	flag.BoolVar(&SixNineHaveTail, "t", false, "Removes tail from six and nine.")
 	flag.StringVar(&DigitColour, "dc", "none", "The colour of the digit as a hex code.")
 	flag.StringVar(&BackgroundColour, "bc", "none", "The colour of the background as a hex code.")
+	flag.BoolVar(&TwelveHour, "th", false, "Uses 12 hour clock instead of 24.")
+	flag.BoolVar(&Mini, "m", false, "Makes the clock much smaller, but forces the segment type.")
 	flag.Parse()
 	if SquareSegments { SquareSegments = false } else {SquareSegments = true}
 	if SixNineHaveTail { SixNineHaveTail = false } else {SixNineHaveTail = true}
@@ -208,7 +249,9 @@ func main() {
 			var iHour, iMinute, iSecond int = DisplayTime.Clock()
 			var Hour, Minute, Second uint8 = uint8(iHour), uint8(iMinute), uint8(iSecond)
 			
-			RenderDigits(
+			if TwelveHour { Hour %= 12 }
+
+			CombinedTable := 
 				CombineDrawTables(
 				DigitMatrix(Hour/10),
 				DigitMatrix(Hour%10),
@@ -217,14 +260,18 @@ func main() {
 				DigitMatrix(Minute%10),
 				Colon,
 				DigitMatrix(Second/10),
-				DigitMatrix(Second%10)))
+				DigitMatrix(Second%10))
 
-			fmt.Print(DisplayTime.Date())
-			fmt.Print("\x1b[9A\r")
+			if Mini {
+					BrailleRender(CombinedTable)
+					fmt.Print(DisplayTime.Date())
+					fmt.Print("\x1b[3A\r")
+				} else {
+					RenderDigits(CombinedTable)
+					fmt.Print(DisplayTime.Date())
+					fmt.Print("\x1b[9A\r")
+				}
 		}
 	}
-
-	// fmt.Print("\x1b[?25h")
-
 
 }
