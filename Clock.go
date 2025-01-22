@@ -23,6 +23,8 @@ var (
 	BackgroundRGB = [3]uint8{0, 0, 0}
 	TwelveHour bool
 	Mini bool
+	Tiny bool
+	DisableSeconds bool
 	ShowHexError error
 )
 
@@ -223,6 +225,8 @@ func main() {
 	flag.StringVar(&BackgroundColour, "bc", "none", "The colour of the background as a hex code.")
 	flag.BoolVar(&TwelveHour, "th", false, "Uses 12 hour clock instead of 24.")
 	flag.BoolVar(&Mini, "m", false, "Makes the clock much smaller, but forces the segment type.")
+	flag.BoolVar(&Tiny, "M", false, "Makes the clock one character tall, but disables segment type.")
+	flag.BoolVar(&DisableSeconds, "ds", false, "Disables seconds.")
 	flag.Parse()
 	if SquareSegments { SquareSegments = false } else {SquareSegments = true}
 	if SixNineHaveTail { SixNineHaveTail = false } else {SixNineHaveTail = true}
@@ -243,6 +247,9 @@ func main() {
 	if BackgroundColour != "none" {fmt.Printf("\x1b[48;2;%d;%d;%dm", BackgroundRGB[0], BackgroundRGB[1], BackgroundRGB[2])}
 
 	var ClockTicker = time.NewTicker(time.Second)
+	//if DisableSeconds { ClockTicker = time.NewTicker(time.Minute) } else { ClockTicker = time.NewTicker(time.Second) }
+	//The issue is that it can take up to one tick's length to start rendering. For one second, you're waiting at most one second, which is almost fine (but could be improved.)
+	//To fix it, I need to send a false tick or something when the program starts with time.Now().Clock()
 	for {
 		select {
 		case DisplayTime := <-ClockTicker.C:
@@ -251,18 +258,30 @@ func main() {
 			
 			if TwelveHour { Hour %= 12 }
 
-			CombinedTable := 
-				CombineDrawTables(
-				DigitMatrix(Hour/10),
-				DigitMatrix(Hour%10),
-				Colon,
-				DigitMatrix(Minute/10),
-				DigitMatrix(Minute%10),
-				Colon,
-				DigitMatrix(Second/10),
-				DigitMatrix(Second%10))
+			if !Tiny {
+				var CombinedTable [9][]bool
+				if !DisableSeconds {
+					CombinedTable = 
+					CombineDrawTables(
+					DigitMatrix(Hour/10),
+					DigitMatrix(Hour%10),
+					Colon,
+					DigitMatrix(Minute/10),
+					DigitMatrix(Minute%10),
+					Colon,
+					DigitMatrix(Second/10),
+					DigitMatrix(Second%10))
+				} else {
+					CombinedTable = 
+					CombineDrawTables(
+					DigitMatrix(Hour/10),
+					DigitMatrix(Hour%10),
+					Colon,
+					DigitMatrix(Minute/10),
+					DigitMatrix(Minute%10))
+				}
 
-			if Mini {
+				if Mini {
 					BrailleRender(CombinedTable)
 					fmt.Print(DisplayTime.Date())
 					fmt.Print("\x1b[3A\r")
@@ -271,6 +290,16 @@ func main() {
 					fmt.Print(DisplayTime.Date())
 					fmt.Print("\x1b[9A\r")
 				}
+			} else {
+				if !DisableSeconds {
+					fmt.Printf("%d:%d:%d\n", Hour, Minute, Second)
+				} else {
+					fmt.Printf("%d:%d\n", Hour, Minute)
+				}
+				fmt.Print(DisplayTime.Date())
+				fmt.Print("\x1b[1A\r")
+
+			}
 		}
 	}
 
